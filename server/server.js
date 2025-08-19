@@ -15,6 +15,7 @@ const alertRoutes = require('./routes/alert');
 const watchlistRoutes = require('./routes/watchlist');
 const newsRoutes = require('./routes/news');
 const analyticsRoutes = require('./routes/analytics');
+const activityRoutes = require('./routes/activity');
 
 // Import services
 const PriceService = require('./services/priceService');
@@ -22,6 +23,8 @@ const AlertService = require('./services/alertService');
 const EmailService = require('./services/emailService');
 const NewsService = require('./services/newsService');
 const RateLimitService = require('./services/rateLimitService');
+const ScheduleService = require('./services/scheduleService');
+const { activityLogService } = require('./services/activityLogService');
 
 const app = express();
 const server = createServer(app);
@@ -50,6 +53,9 @@ app.use('/api/', limiter);
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Activity logging middleware (before routes)
+app.use(activityLogService.middleware());
 
 // MongoDB connection
 const connectDB = async () => {
@@ -94,6 +100,9 @@ io.on('connection', (socket) => {
 // Make io accessible to routes
 app.set('io', io);
 
+// Make io globally accessible for services
+global.io = io;
+
 // Routes
 console.log('📍 Registering API routes...');
 app.use('/api/auth', authRoutes);
@@ -103,6 +112,7 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/activity', activityRoutes);
 
 try {
   const realtimeRoutes = require('./routes/realtime');
@@ -114,12 +124,27 @@ try {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  const scheduleInfo = global.scheduleService ? global.scheduleService.getActiveHoursInfo() : null;
+  
   res.status(200).json({
     status: 'OK',
     message: 'Vietnam Stock Tracker API is running',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    serverActive: scheduleInfo?.isActive || false,
+    activeHours: scheduleInfo?.activeHours || 'N/A',
+    currentTime: scheduleInfo?.currentTime || new Date().toISOString(),
+    nextActiveChange: scheduleInfo?.isActive ? scheduleInfo.nextEnd : scheduleInfo?.nextStart
   });
+});
+
+// Server status endpoint
+app.get('/api/server-status', (req, res) => {
+  if (!global.scheduleService) {
+    return res.status(503).json({ message: 'Schedule service not available' });
+  }
+  
+  res.json(global.scheduleService.getActiveHoursInfo());
 });
 
 // Error handling middleware
@@ -142,17 +167,38 @@ const emailService = new EmailService();
 const newsService = new NewsService();
 const priceService = new PriceService(io);
 const alertService = new AlertService(io, emailService);
+const scheduleService = new ScheduleService();
+
+// Make services globally accessible
+global.priceService = priceService;
+global.alertService = alertService;
+global.scheduleService = scheduleService;
+global.activityLogService = activityLogService;
 
 // Make services accessible to routes
 app.set('io', io);
 app.set('emailService', emailService);
 app.set('newsService', newsService);
 app.set('rateLimitService', rateLimitService);
+app.set('scheduleService', scheduleService);
+app.set('activityLogService', activityLogService);
 
 // Start services
+console.log('🚀 Starting services...');
 priceService.start();
 alertService.start();
 // newsService.start(); // Disabled for now to prevent validation errors
+
+console.log('📅 Schedule Service: Managing server active hours (9 AM - 3 PM Vietnam time)');
+console.log('💾 Activity Logging: All user actions will be saved to database');
+
+// Clean old activity logs daily at midnight
+const cron = require('node-cron');
+cron.schedule('0 0 * * *', async () => {
+  await activityLogService.cleanOldLogs();
+}, {
+  timezone: 'Asia/Ho_Chi_Minh'
+});
 
 const PORT = process.env.PORT || 5000;
 
