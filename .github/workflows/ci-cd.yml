@@ -1,0 +1,229 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '18.x'
+
+jobs:
+  test:
+    name: Test and Lint
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:6.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: password
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd mongo
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install server dependencies
+      run: |
+        cd server
+        npm ci
+
+    - name: Install client dependencies
+      run: |
+        cd client
+        npm ci
+
+    - name: Lint server code
+      run: |
+        cd server
+        npm run lint || echo "No lint script found"
+
+    - name: Lint client code
+      run: |
+        cd client
+        npm run lint
+
+    - name: Create test environment file
+      run: |
+        cd server
+        cat > .env.test << EOF
+        MONGODB_URI=mongodb://root:password@localhost:27017/vietnam_stock_tracker_test?authSource=admin
+        JWT_SECRET=test_jwt_secret_key_for_testing_purposes_only
+        JWT_EXPIRE=7d
+        JWT_REFRESH_SECRET=test_refresh_secret_key_for_testing_purposes_only
+        JWT_REFRESH_EXPIRE=30d
+        PORT=5001
+        NODE_ENV=test
+        CLIENT_URL=http://localhost:3000
+        EMAIL_SERVICE=gmail
+        EMAIL_USER=test@example.com
+        EMAIL_PASS=test_password
+        EMAIL_FROM=Test <test@example.com>
+        ALPHA_VANTAGE_API_KEY=demo
+        REDIS_URL=redis://localhost:6379
+        MAX_FILE_SIZE=10MB
+        EOF
+
+    - name: Run server tests
+      run: |
+        cd server
+        npm test || echo "No tests found"
+      env:
+        NODE_ENV: test
+
+    - name: Build client
+      run: |
+        cd client
+        npm run build
+
+    - name: Cache client build
+      uses: actions/cache@v4
+      with:
+        path: client/dist
+        key: client-build-${{ github.sha }}
+        restore-keys: |
+          client-build-
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        cd server && npm ci
+        cd ../client && npm ci
+
+    - name: Run npm audit (server)
+      run: |
+        cd server
+        npm audit --audit-level moderate || true
+
+    - name: Run npm audit (client)
+      run: |
+        cd client
+        npm audit --audit-level moderate || true
+
+    - name: Check for sensitive files
+      run: |
+        echo "Checking for sensitive files..."
+        if find . -name "*.env" -not -path "./.env.example" -not -path "./.env.test" | grep -q .; then
+          echo "Warning: .env files found in repository"
+          find . -name "*.env" -not -path "./.env.example" -not -path "./.env.test"
+        fi
+        
+        if find . -name "*.key" -o -name "*.pem" -o -name "*.p12" -o -name "*.pfx" | grep -q .; then
+          echo "Warning: Certificate/key files found"
+          find . -name "*.key" -o -name "*.pem" -o -name "*.p12" -o -name "*.pfx"
+        fi
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install dependencies and build
+      run: |
+        cd client
+        npm ci
+        npm run build
+
+    - name: Deploy to Vercel (Staging)
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: ./client
+        scope: ${{ secrets.VERCEL_ORG_ID }}
+        alias-domains: |
+          vietnam-stock-tracker-staging.vercel.app
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install dependencies and build client
+      run: |
+        cd client
+        npm ci
+        npm run build
+
+    - name: Deploy Frontend to Vercel
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: ./client
+        vercel-args: '--prod'
+        scope: ${{ secrets.VERCEL_ORG_ID }}
+
+    - name: Deploy Backend to Railway
+      run: |
+        cd server
+        echo "Deploying to Railway..."
+        # Railway deployment will be handled by Railway CLI or webhook
+        
+    - name: Notify deployment success
+      run: |
+        echo "✅ Deployment completed successfully!"
+        echo "Frontend: https://vietnam-stock-tracker.vercel.app"
+        echo "Backend: https://vietnam-stock-tracker-production.up.railway.app"

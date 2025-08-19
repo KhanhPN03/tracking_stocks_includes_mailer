@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "name": "vietnam-stock-tracker-backend",
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
