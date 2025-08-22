@@ -215,3 +215,51 @@ monitoring/
 .cache/
 .temp/
 .tmp/
+
+# Additional Security Files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.keystore
+config.json
+keys.json
+
+# Test and Development Files
+test_*.js
+*_test.js
+*.test.local.js
+update_*.js
+show_*.js
+quick*Test.js
+
+# Database dumps and exports
+*.sql
+*.dump
+*.bak
+*.backup
+*.archive
+
+# API Documentation with sensitive info
+api-docs-private/
+swagger-private.json
+
+# User uploads and sensitive data
+uploads/
+user-data/
+sensitive/
+private/
+
+# Monitoring and analytics
+analytics/
+metrics/
+traces/
+
+# Email templates with sensitive info
+email-templates-private/
+
+# Config files that might contain secrets
+ecosystem.config.js
+pm2.config.js
