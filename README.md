@@ -264,73 +264,6 @@ cd client && npm run dev
 - Backend API: http://localhost:5000
 - API Documentation: http://localhost:5000/api-docs
 
-## 🌐 Production Deployment
-
-### Automated Deployment (Recommended)
-
-1. **Push to GitHub** - The CI/CD pipeline automatically:
-   - Runs comprehensive tests
-   - Performs security vulnerability scans
-   - Builds optimized production bundles
-   - Deploys to staging environment
-   - Deploys to production on main branch
-
-2. **Set up free deployment accounts**:
-   - **Frontend**: [Vercel](https://vercel.com) (Free tier: unlimited bandwidth)
-   - **Backend**: [Railway](https://railway.app) (Free tier: $5 credit monthly)
-   - **Database**: [MongoDB Atlas](https://mongodb.com/atlas) (Free tier: 512MB)
-
-### Manual Deployment
-
-#### Frontend (Vercel)
-```bash
-cd client
-npm run build
-npx vercel --prod
-```
-
-#### Backend (Railway)
-```bash
-cd server
-docker build -t vietnam-stock-tracker .
-# Push to Railway or deploy via GitHub integration
-```
-
-#### Database (MongoDB Atlas)
-- Create cluster on MongoDB Atlas
-- Get connection string
-- Update MONGODB_URI in environment variables
-
-### Environment Variables for Production
-```bash
-# Database
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/vietnam_stock_tracker
-
-# Authentication
-JWT_SECRET=production_super_secure_jwt_secret_minimum_32_characters
-
-# External APIs
-ALPHA_VANTAGE_API_KEY=your_production_api_key
-DNSE_API_KEY=your_production_dnse_key
-
-# Email Service
-EMAIL_USER=notifications@yourdomain.com
-EMAIL_PASS=your_production_email_password
-
-# Server Configuration
-SERVER_TIMEZONE=Asia/Ho_Chi_Minh
-SERVER_START_HOUR=9
-SERVER_END_HOUR=15
-NODE_ENV=production
-
-# Redis (optional for production scaling)
-REDIS_URL=rediss://username:password@redis-host:port
-
-# Activity Logging
-ACTIVITY_BATCH_SIZE=10
-ACTIVITY_BATCH_INTERVAL=5000
-ACTIVITY_RETENTION_DAYS=30
-```
 
 ## 📊 API Documentation
 
@@ -784,29 +717,6 @@ npm run test:watch
 npm test models/User.test.js
 ```
 
-## 🚀 Deployment
-
-### Environment Setup
-1. Set `NODE_ENV=production`
-2. Configure production database
-3. Set secure JWT secrets
-4. Configure email service
-5. Set up Redis for production
-
-### Docker Deployment (Optional)
-```bash
-# Build Docker image
-docker build -t vietnam-stock-tracker .
-
-# Run with Docker Compose
-docker-compose up -d
-```
-
-### Deployment Platforms
-- **Heroku**: Easy deployment with MongoDB Atlas
-- **DigitalOcean**: App Platform or Droplets
-- **AWS**: EC2, ECS, or Lambda
-- **Vercel**: For frontend deployment
 
 ## 📈 Performance Optimization
 
